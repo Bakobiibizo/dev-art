@@ -1,3 +1,4 @@
+//! HTTP router setup for the Axum server.
 use axum::{
     routing::{get, post},
     Router,

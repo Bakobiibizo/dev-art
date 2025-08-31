@@ -1,3 +1,9 @@
+//! Minimal in-memory and file-backed workflow manager.
+//!
+//! Responsibilities:
+//! - Load/save workflows from `prompts/<name>.json`.
+//! - Keep track of the last selected workflow.
+//! - Store arbitrary node metadata (if provided programmatically).
 use serde_json::Value;
 use std::collections::HashMap;
 

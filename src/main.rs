@@ -53,9 +53,11 @@ async fn main() {
         .with_state(state);
 
     // Run our application
-    let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
-    tracing::info!("listening on {}", addr);
-    axum::Server::bind(&addr)
+    let ip = config.api_host;
+    let port = config.api_port;
+    let socket_address = SocketAddr::new(ip.parse().unwrap(), port.parse().unwrap());
+    tracing::info!("listening on {}", socket_address);
+    axum::Server::bind(&socket_address)
         .serve(app.into_make_service())
         .await
         .unwrap();

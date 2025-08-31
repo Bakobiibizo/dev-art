@@ -1,3 +1,8 @@
+//! Thin HTTP client for ComfyUI endpoints.
+//!
+//! - `queue_prompt` posts a prompt JSON to `/prompt`.
+//! - `get_image` proxies to `/view?filename=...` and returns raw bytes.
+//! - `get_history` fetches `/history` as JSON.
 use reqwest::Client;
 use serde_json::Value;
 use crate::error::{AppResult, AppError};
@@ -10,12 +15,14 @@ pub struct ComfyUIClient {
 
 impl ComfyUIClient {
     pub fn new(base_url: String) -> Self {
-        ComfyUIClient {
-            client: Client::new(),
-            base_url,
-        }
+        let base = base_url.trim_end_matches('/').to_string();
+        ComfyUIClient { client: Client::new(), base_url: base }
     }
 
+    /// Queue a prompt with ComfyUI.
+    ///
+    /// Expects a JSON document compatible with ComfyUI's `/prompt` endpoint.
+    /// Returns the JSON response from ComfyUI on success.
     pub async fn queue_prompt(&self, prompt: Value) -> AppResult<Value> {
         let url = format!("{}/prompt", self.base_url);
         tracing::info!("Sending prompt to ComfyUI at URL: {}", url);
@@ -40,6 +47,7 @@ impl ComfyUIClient {
         }
     }
 
+    /// Fetch image bytes by filename via ComfyUI's `/view` endpoint.
     pub async fn get_image(&self, filename: &str) -> AppResult<Vec<u8>> {
         let url = format!("{}/view", self.base_url);
         let response = self.client.get(&url)
@@ -55,6 +63,7 @@ impl ComfyUIClient {
         }
     }
 
+    /// Retrieve ComfyUI execution history as JSON.
     pub async fn get_history(&self) -> AppResult<Value> {
         let url = format!("{}/history", self.base_url);
         let response = self.client.get(&url)

@@ -1,3 +1,7 @@
-/target
+target/
 .env
 .agent
+static/
+!static/.gitkeep
+.reference
+AGENTS.md

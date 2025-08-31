@@ -1,3 +1,8 @@
+//! Prompt templating with simple `{{placeholder}}` substitution.
+//!
+//! Given a JSON `template` and an `inputs` object, recursively walks the
+//! template and replaces any string values of the form `{{ key }}` with
+//! `inputs[key]`, returning a constructed JSON value.
 use serde_json::Value;
 use crate::error::{AppResult, AppError};
 
@@ -8,6 +13,8 @@ impl PromptConstructor {
         PromptConstructor
     }
 
+    /// Construct a prompt by substituting placeholders inside `template`
+    /// with corresponding values from `inputs`.
     pub fn construct_prompt(&self, template: &Value, inputs: &Value) -> AppResult<Value> {
         self.validate_template(template)?;
         self.validate_inputs(inputs)?;
@@ -18,16 +25,19 @@ impl PromptConstructor {
         Ok(constructed)
     }
 
+    /// TODO: Placeholder for template validation (shape, required fields, etc.).
     fn validate_template(&self, template: &Value) -> AppResult<()> {
         // Add template validation logic here
         Ok(())
     }
 
+    /// TODO: Placeholder for input validation.
     fn validate_inputs(&self, inputs: &Value) -> AppResult<()> {
         // Add input validation logic here
         Ok(())
     }
 
+    /// Recursively replace `{{key}}` strings with `inputs[key]`.
     fn replace_placeholders(&self, value: &mut Value, inputs: &Value) -> AppResult<()> {
         match value {
             Value::Object(map) => {

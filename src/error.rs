@@ -1,3 +1,4 @@
+//! Central error definitions used across the crate.
 use thiserror::Error;
 
 #[derive(Error, Debug)]

@@ -1,3 +1,4 @@
+//! Axum request handlers for the HTTP API.
 use axum::{extract::{Query, State}, Json};
 use serde_json::{Value, json, from_str};
 use std::sync::Arc;

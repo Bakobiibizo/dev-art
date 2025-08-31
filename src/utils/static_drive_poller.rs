@@ -1,3 +1,8 @@
+//! Background poller for a local static directory.
+//!
+//! Intended as a scaffold for reacting to newly created files under
+//! `STATIC_DRIVE_PATH`. Currently it iterates directory entries on an
+//! interval but performs no side effects.
 use tokio::time::{self, Duration};
 use std::path::Path;
 use tokio::fs;
