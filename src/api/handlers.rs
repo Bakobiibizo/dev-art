@@ -27,8 +27,15 @@ pub async fn queue_prompt(
     let workflow: Value = from_str(&workflow_content)
         .map_err(|e| format!("Failed to parse workflow JSON: {}", e))?;
 
+    // Ensure payload matches ComfyUI's expected shape {"prompt": {...}}
+    let body = if workflow.get("prompt").is_some() {
+        workflow
+    } else {
+        json!({"prompt": workflow})
+    };
+
     // Use the loaded workflow as the body of the request
-    state.comfyui_client.queue_prompt(workflow)
+    state.comfyui_client.queue_prompt(body)
         .await
         .map(Json)
         .map_err(|e| {
