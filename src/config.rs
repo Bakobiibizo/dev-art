@@ -31,5 +31,8 @@ impl Config {
     pub fn print_env_vars() {
         println!("COMFYUI_URL: {}", env::var("COMFYUI_URL").unwrap());
         println!("STATIC_DRIVE_PATH: {}", env::var("STATIC_DRIVE_PATH").unwrap());
+        println!("PROMPTS_DIR: {}", env::var("PROMPTS_DIR").unwrap());
+        println!("API_HOST: {}", env::var("API_HOST").unwrap());
+        println!("API_PORT: {}", env::var("API_PORT").unwrap());
     }
 }

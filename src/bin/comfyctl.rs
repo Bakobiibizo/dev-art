@@ -102,6 +102,9 @@ enum PromptCmd {
         /// Output raw JSON response instead of a friendly line
         #[arg(long)]
         json: bool,
+        /// Treat failed --set applications as errors (exit non-zero)
+        #[arg(long)]
+        strict_set: bool,
     },
 }
 
@@ -160,10 +163,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 text_positive, text_negative,
                 seed, steps, cfg, sampler_name, scheduler, denoise,
                 width, height, batch_size, ckpt_name,
-                verbose, json,
+                verbose, json, strict_set,
             } => {
                 let path = match (workflow, file) {
-                    (Some(name), None) => format!("prompts/{}.json", name),
+                    (Some(name), None) => {
+                        let mut p = std::path::PathBuf::from(conf.prompts_dir.clone());
+                        p.push(format!("{}.json", name));
+                        p.to_string_lossy().to_string()
+                    }
                     (None, Some(p)) => p,
                     _ => {
                         eprintln!("Must provide either --workflow <name> or --file <path>");
@@ -175,6 +182,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 // Extract graph whether already wrapped or not
                 let mut graph = if let Some(p) = raw.get("prompt").cloned() { p } else { raw.clone() };
+
+                // Validate the graph shape minimally
+                if !is_probably_graph(&graph) {
+                    return Err(format!("Workflow at '{}' does not look like a valid ComfyUI graph", path).into());
+                }
 
                 // Build params map from flags
                 let mut params = serde_json::Map::new();
@@ -203,8 +215,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     for (path, new_val) in pairs {
                         if !apply_set_path(&mut graph, &path, new_val.clone()) {
                             // If graph was originally wrapped, user may have provided a full path starting with `prompt.`
-                            if !apply_set_path(&mut raw, &path, new_val.clone()) {
-                                eprintln!("Warning: could not apply --set to path: {}", path.join("."));
+                            let ok2 = apply_set_path(&mut raw, &path, new_val.clone());
+                            if !ok2 {
+                                let msg = format!("Failed to apply --set to path: {}", path.join("."));
+                                if strict_set { return Err(msg.into()); }
+                                eprintln!("Warning: {}", msg);
                             }
                         }
                     }
@@ -394,6 +409,19 @@ fn collect_any_filenames(v: &Value, out: &mut Vec<String>) {
         }
         _ => {}
     }
+}
+
+fn is_probably_graph(graph: &Value) -> bool {
+    if let Some(obj) = graph.as_object() {
+        for (_k, v) in obj.iter() {
+            if let Some(node) = v.as_object() {
+                if node.get("class_type").and_then(|ct| ct.as_str()).is_some() {
+                    return true;
+                }
+            }
+        }
+    }
+    false
 }
 
 fn collect_prompt_ids(v: &Value, out: &mut Vec<String>) {
