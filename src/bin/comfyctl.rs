@@ -2,6 +2,7 @@ use clap::{Parser, Subcommand};
 use comfyui_api_proxy::{Config, ComfyUIClient};
 use serde_json::{json, Value};
 use std::path::PathBuf;
+use comfyui_api_proxy::utils::prompt_ops::{apply_set_path, ensure_filename_prefix, parse_set_pairs};
 
 #[derive(Parser, Debug)]
 #[command(name = "comfyctl", about = "CLI for ComfyUI API Proxy", version)]
@@ -99,7 +100,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 // Apply dynamic overrides
                 if !sets.is_empty() {
-                    let pairs = parse_set_pairs(&sets)?;
+                    let pairs = parse_set_pairs(&sets).map_err(|e| {
+                        let boxed: Box<dyn std::error::Error> = e.into();
+                        boxed
+                    })?;
                     for (path, new_val) in pairs {
                         if !apply_set_path(&mut graph, &path, new_val.clone()) {
                             // If graph was originally wrapped, user may have provided a full path starting with `prompt.`
@@ -214,75 +218,4 @@ fn collect_any_filenames(v: &Value, out: &mut Vec<String>) {
     }
 }
 
-fn parse_set_pairs(items: &[String]) -> Result<Vec<(Vec<String>, Value)>, Box<dyn std::error::Error>> {
-    let mut out = Vec::new();
-    for s in items {
-        let Some((k, val)) = s.split_once('=') else {
-            return Err(format!("Invalid --set '{}', expected KEY=VALUE", s).into());
-        };
-        let key_path: Vec<String> = k.split('.').map(|p| p.to_string()).collect();
-        let parsed_val = parse_value(val);
-        out.push((key_path, parsed_val));
-    }
-    Ok(out)
-}
-
-fn parse_value(src: &str) -> Value {
-    // Try JSON first (so strings can be quoted, objects/arrays supported)
-    if let Ok(v) = serde_json::from_str::<Value>(src) { return v; }
-    // Fall back to primitive inference
-    if src.eq_ignore_ascii_case("null") { return Value::Null; }
-    if src.eq_ignore_ascii_case("true") { return Value::Bool(true); }
-    if src.eq_ignore_ascii_case("false") { return Value::Bool(false); }
-    if let Ok(i) = src.parse::<i64>() { return Value::from(i); }
-    if let Ok(f) = src.parse::<f64>() { return json!(f); }
-    Value::String(src.to_string())
-}
-
-fn apply_set_path(root: &mut Value, path: &[String], new_val: Value) -> bool {
-    if path.is_empty() { return false; }
-    // Navigate creating objects as needed; arrays are not auto-created
-    let mut cur = root;
-    for (i, key) in path.iter().enumerate() {
-        let is_last = i == path.len() - 1;
-        if is_last {
-            if let Value::Object(map) = cur {
-                map.insert(key.clone(), new_val);
-                return true;
-            } else {
-                return false;
-            }
-        } else {
-            match cur {
-                Value::Object(map) => {
-                    cur = map.entry(key.clone()).or_insert(Value::Object(serde_json::Map::new()));
-                }
-                _ => return false,
-            }
-        }
-    }
-    false
-}
-
-fn ensure_filename_prefix(graph: &mut Value, default_prefix: &str) {
-    // If node 8 exists and has inputs.filename_prefix, set default (unless already set)
-    if let Some(obj) = graph.as_object_mut() {
-        if let Some(node8) = obj.get_mut("8") {
-            if let Some(inputs) = node8.get_mut("inputs").and_then(|v| v.as_object_mut()) {
-                if !inputs.contains_key("filename_prefix") {
-                    inputs.insert("filename_prefix".to_string(), Value::String(default_prefix.to_string()));
-                }
-            }
-        }
-        // Also set on any SaveImage nodes if not set
-        for (_k, node) in obj.iter_mut() {
-            if node.get("class_type").and_then(|v| v.as_str()) == Some("SaveImage") {
-                if let Some(inputs) = node.get_mut("inputs").and_then(|v| v.as_object_mut()) {
-                    if !inputs.contains_key("filename_prefix") {
-                        inputs.insert("filename_prefix".to_string(), Value::String(default_prefix.to_string()));
-                    }
-                }
-            }
-        }
-    }
-}
+// helper functions moved to utils::prompt_ops

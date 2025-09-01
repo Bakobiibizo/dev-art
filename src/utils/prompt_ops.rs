@@ -1,0 +1,70 @@
+use serde_json::{json, Map, Value};
+
+pub fn parse_set_pairs(items: &[String]) -> Result<Vec<(Vec<String>, Value)>, String> {
+    let mut out = Vec::new();
+    for s in items {
+        let Some((k, val)) = s.split_once('=') else {
+            return Err(format!("Invalid --set '{}', expected KEY=VALUE", s));
+        };
+        let key_path: Vec<String> = k.split('.').map(|p| p.to_string()).collect();
+        let parsed_val = parse_value(val);
+        out.push((key_path, parsed_val));
+    }
+    Ok(out)
+}
+
+pub fn parse_value(src: &str) -> Value {
+    if let Ok(v) = serde_json::from_str::<Value>(src) { return v; }
+    if src.eq_ignore_ascii_case("null") { return Value::Null; }
+    if src.eq_ignore_ascii_case("true") { return Value::Bool(true); }
+    if src.eq_ignore_ascii_case("false") { return Value::Bool(false); }
+    if let Ok(i) = src.parse::<i64>() { return Value::from(i); }
+    if let Ok(f) = src.parse::<f64>() { return json!(f); }
+    Value::String(src.to_string())
+}
+
+pub fn apply_set_path(root: &mut Value, path: &[String], new_val: Value) -> bool {
+    if path.is_empty() { return false; }
+    let mut cur = root;
+    for (i, key) in path.iter().enumerate() {
+        let is_last = i == path.len() - 1;
+        if is_last {
+            if let Value::Object(map) = cur {
+                map.insert(key.clone(), new_val);
+                return true;
+            } else {
+                return false;
+            }
+        } else {
+            match cur {
+                Value::Object(map) => {
+                    cur = map.entry(key.clone()).or_insert(Value::Object(Map::new()));
+                }
+                _ => return false,
+            }
+        }
+    }
+    false
+}
+
+pub fn ensure_filename_prefix(graph: &mut Value, default_prefix: &str) {
+    if let Some(obj) = graph.as_object_mut() {
+        if let Some(node8) = obj.get_mut("8") {
+            if let Some(inputs) = node8.get_mut("inputs").and_then(|v| v.as_object_mut()) {
+                if !inputs.contains_key("filename_prefix") {
+                    inputs.insert("filename_prefix".to_string(), Value::String(default_prefix.to_string()));
+                }
+            }
+        }
+        for (_k, node) in obj.iter_mut() {
+            if node.get("class_type").and_then(|v| v.as_str()) == Some("SaveImage") {
+                if let Some(inputs) = node.get_mut("inputs").and_then(|v| v.as_object_mut()) {
+                    if !inputs.contains_key("filename_prefix") {
+                        inputs.insert("filename_prefix".to_string(), Value::String(default_prefix.to_string()));
+                    }
+                }
+            }
+        }
+    }
+}
+
