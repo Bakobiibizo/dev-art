@@ -38,7 +38,11 @@ pub fn apply_set_path(root: &mut Value, path: &[String], new_val: Value) -> bool
         } else {
             match cur {
                 Value::Object(map) => {
-                    cur = map.entry(key.clone()).or_insert(Value::Object(Map::new()));
+                    if let Some(next) = map.get_mut(key) {
+                        cur = next;
+                    } else {
+                        return false;
+                    }
                 }
                 _ => return false,
             }
@@ -49,13 +53,6 @@ pub fn apply_set_path(root: &mut Value, path: &[String], new_val: Value) -> bool
 
 pub fn ensure_filename_prefix(graph: &mut Value, default_prefix: &str) {
     if let Some(obj) = graph.as_object_mut() {
-        if let Some(node8) = obj.get_mut("8") {
-            if let Some(inputs) = node8.get_mut("inputs").and_then(|v| v.as_object_mut()) {
-                if !inputs.contains_key("filename_prefix") {
-                    inputs.insert("filename_prefix".to_string(), Value::String(default_prefix.to_string()));
-                }
-            }
-        }
         for (_k, node) in obj.iter_mut() {
             if node.get("class_type").and_then(|v| v.as_str()) == Some("SaveImage") {
                 if let Some(inputs) = node.get_mut("inputs").and_then(|v| v.as_object_mut()) {

@@ -71,6 +71,7 @@ async fn main() {
     let socket_address = SocketAddr::new(ip, port);
     tracing::info!("listening on {}", socket_address);
     axum::Server::bind(&socket_address)
+
         .serve(app.into_make_service())
         .await
         .unwrap();

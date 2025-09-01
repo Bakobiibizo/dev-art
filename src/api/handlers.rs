@@ -34,6 +34,7 @@ pub async fn queue_prompt(
 }
     
 
+
 pub async fn get_name(Query(params): Query<std::collections::HashMap<String, String>>) -> String {
     let default = String::from("sdxl");
     let name = params.get("name").ok_or(&default).unwrap_or(&default);

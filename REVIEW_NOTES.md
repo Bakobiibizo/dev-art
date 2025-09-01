@@ -31,3 +31,4 @@ This meta-commit documents changes made during the review cycle for API parity a
   - README updated with CLI/API usage, flags, and endpoints.
 
 This branch focuses on server/API behavior and parity with the CLI while keeping logic DRY across both surfaces.
+

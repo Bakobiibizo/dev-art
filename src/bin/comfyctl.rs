@@ -103,6 +103,9 @@ enum PromptCmd {
         /// Output raw JSON response instead of a friendly line
         #[arg(long)]
         json: bool,
+        /// Treat failed --set applications as errors (exit non-zero)
+        #[arg(long)]
+        strict_set: bool,
     },
 }
 
@@ -161,10 +164,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 text_positive, text_negative,
                 seed, steps, cfg, sampler_name, scheduler, denoise,
                 width, height, batch_size, ckpt_name,
-                verbose, json,
+                verbose, json, strict_set,
             } => {
                 let path = match (workflow, file) {
-                    (Some(name), None) => format!("prompts/{}.json", name),
+                    (Some(name), None) => {
+                        let mut p = std::path::PathBuf::from(conf.prompts_dir.clone());
+                        p.push(format!("{}.json", name));
+                        p.to_string_lossy().to_string()
+                    }
                     (None, Some(p)) => p,
                     _ => {
                         eprintln!("Must provide either --workflow <name> or --file <path>");
@@ -177,7 +184,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 // Extract graph whether already wrapped or not
                 let mut graph = if let Some(p) = raw.get("prompt").cloned() { p } else { raw.clone() };
 
-// Validate the graph shape minimally
                 if !is_probably_graph(&graph) {
                     return Err(format!("Workflow at '{}' does not look like a valid ComfyUI graph", path).into());
                 }
@@ -205,19 +211,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 ensure_defaults_on_root(&mut body, Some(&filename_prefix));
                 if verbose { eprintln!("[verbose] Request body to ComfyUI:
 {}", serde_json::to_string_pretty(&body)?); }
-                let mut params = serde_json::Map::new();
-                if let Some(t) = text_positive { params.insert("text_positive".into(), Value::String(t)); }
-                if let Some(t) = text_negative { params.insert("text_negative".into(), Value::String(t)); }
-                if let Some(v) = seed { params.insert("seed".into(), Value::from(v)); }
-                if let Some(v) = steps { params.insert("steps".into(), Value::from(v)); }
-                if let Some(v) = cfg { params.insert("cfg".into(), json!(v)); }
-                if let Some(v) = sampler_name { params.insert("sampler_name".into(), Value::String(v)); }
-                if let Some(v) = scheduler { params.insert("scheduler".into(), Value::String(v)); }
-                if let Some(v) = denoise { params.insert("denoise".into(), json!(v)); }
-                if let Some(v) = width { params.insert("width".into(), Value::from(v)); }
-                if let Some(v) = height { params.insert("height".into(), Value::from(v)); }
-                if let Some(v) = batch_size { params.insert("batch_size".into(), Value::from(v)); }
-                if let Some(v) = ckpt_name { params.insert("ckpt_name".into(), Value::String(v)); }
+
                 if !params.is_empty() {
                     apply_params_map(&mut graph, &Value::Object(params));
                 }
