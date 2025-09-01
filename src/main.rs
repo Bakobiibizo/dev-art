@@ -46,9 +46,13 @@ async fn main() {
         .route("/queue_prompt", post(api::handlers::queue_prompt))
         .route("/get_image", get(api::handlers::get_image))
         .route("/get_history", get(api::handlers::get_history))
+        .route("/history", get(api::handlers::history_friendly))
         .route("/add_workflow", post(api::handlers::add_workflow))
         .route("/get_node_info", get(api::handlers::get_node_info))
         .route("/construct_prompt", post(api::handlers::construct_prompt))
+        .route("/models", get(api::handlers::models_categories))
+        .route("/models/checkpoints", get(api::handlers::models_checkpoints))
+        .route("/models/:category", get(api::handlers::models_in_category))
         .layer(CorsLayer::permissive())
         .with_state(state);
 
