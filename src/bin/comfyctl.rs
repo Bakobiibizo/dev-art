@@ -36,6 +36,11 @@ enum Commands {
         #[command(subcommand)]
         cmd: ImageCmd,
     },
+    /// Model listing utilities
+    Models {
+        #[command(subcommand)]
+        cmd: ModelsCmd,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -106,6 +111,31 @@ enum ImageCmd {
         /// Output path (defaults to ./<filename>)
         #[arg(long, value_name = "PATH")]
         out: Option<PathBuf>,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+enum ModelsCmd {
+    /// Show available model categories from /models
+    Categories {
+        /// Output raw JSON instead of pretty lines
+        #[arg(long)]
+        json: bool,
+    },
+    /// List models in a category, e.g. checkpoints, vae, clip
+    List {
+        /// Category name under /models/<category>
+        #[arg(long)]
+        category: String,
+        /// Output raw JSON instead of pretty lines
+        #[arg(long)]
+        json: bool,
+    },
+    /// Convenience: list checkpoints (values for ckpt_name)
+    Checkpoints {
+        /// Output raw JSON instead of pretty lines
+        #[arg(long)]
+        json: bool,
     },
 }
 
@@ -238,6 +268,62 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let path = out.unwrap_or_else(|| default_dir.join(&filename));
                 tokio::fs::write(&path, &bytes).await?;
                 println!("Saved {} ({} bytes)", path.display(), bytes.len());
+                Ok(())
+            }
+        },
+        Commands::Models { cmd } => match cmd {
+            ModelsCmd::Categories { json } => {
+                let client = ComfyUIClient::new(conf.comfyui_url.clone());
+                let v = client.get_model_categories().await?;
+                if json {
+                    println!("{}", serde_json::to_string(&v)?);
+                } else {
+                    if let Some(arr) = v.as_array() {
+                        for item in arr {
+                            if let Some(s) = item.as_str() { println!("{}", s); } else { println!("{}", item); }
+                        }
+                    } else {
+                        println!("{}", serde_json::to_string_pretty(&v)?);
+                    }
+                }
+                Ok(())
+            }
+            ModelsCmd::List { category, json } => {
+                let client = ComfyUIClient::new(conf.comfyui_url.clone());
+                let v = client.get_models_in_category(&category).await?;
+                if json {
+                    println!("{}", serde_json::to_string(&v)?);
+                } else if let Some(arr) = v.as_array() {
+                    for item in arr {
+                        match item {
+                            serde_json::Value::String(s) => println!("{}", s),
+                            serde_json::Value::Object(o) => {
+                                if let Some(name) = o.get("name").and_then(|x| x.as_str()) {
+                                    println!("{}", name);
+                                } else {
+                                    println!("{}", serde_json::to_string_pretty(item).unwrap_or_default());
+                                }
+                            }
+                            _ => println!("{}", item),
+                        }
+                    }
+                } else {
+                    println!("{}", serde_json::to_string_pretty(&v)?);
+                }
+                Ok(())
+            }
+            ModelsCmd::Checkpoints { json } => {
+                let client = ComfyUIClient::new(conf.comfyui_url.clone());
+                let v = client.get_checkpoints().await?;
+                if json {
+                    println!("{}", serde_json::to_string(&v)?);
+                } else if let Some(arr) = v.as_array() {
+                    for item in arr {
+                        if let Some(s) = item.as_str() { println!("{}", s); } else { println!("{}", item); }
+                    }
+                } else {
+                    println!("{}", serde_json::to_string_pretty(&v)?);
+                }
                 Ok(())
             }
         },

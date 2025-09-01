@@ -79,4 +79,37 @@ impl ComfyUIClient {
     }
 
     // Add more methods for other ComfyUI API endpoints here
+
+    /// List model categories available from ComfyUI `/models` endpoint.
+    pub async fn get_model_categories(&self) -> AppResult<Value> {
+        let url = format!("{}/models", self.base_url);
+        let response = self.client.get(&url)
+            .send()
+            .await
+            .map_err(AppError::HttpClient)?;
+        if response.status().is_success() {
+            response.json().await.map_err(AppError::HttpClient)
+        } else {
+            Err(AppError::ComfyUI(format!("Failed to list model categories: {:?}", response.status())))
+        }
+    }
+
+    /// List models within a category from `/models/<category>`.
+    pub async fn get_models_in_category(&self, category: &str) -> AppResult<Value> {
+        let url = format!("{}/models/{}", self.base_url, category);
+        let response = self.client.get(&url)
+            .send()
+            .await
+            .map_err(AppError::HttpClient)?;
+        if response.status().is_success() {
+            response.json().await.map_err(AppError::HttpClient)
+        } else {
+            Err(AppError::ComfyUI(format!("Failed to list models in '{}': {:?}", category, response.status())))
+        }
+    }
+
+    /// Convenience for `/models/checkpoints` which is the source for `ckpt_name` values.
+    pub async fn get_checkpoints(&self) -> AppResult<Value> {
+        self.get_models_in_category("checkpoints").await
+    }
 }
