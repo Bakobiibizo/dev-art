@@ -5,7 +5,7 @@ use std::sync::Arc;
 use tokio::fs;
 
 use crate::api::routes::AppState;
-use crate::utils::prompt_ops::{parse_set_pairs, apply_set_path, ensure_filename_prefix};
+use crate::utils::prompt_ops::{parse_set_pairs, apply_set_path, ensure_filename_prefix, apply_params_map};
 
 pub async fn root() -> &'static str {
     "ComfyUI API Proxy"
@@ -33,6 +33,13 @@ pub async fn queue_prompt(
         let wf: Value = from_str(&workflow_content)
             .map_err(|e| format!("Failed to parse workflow JSON: {}", e))?;
         root = if wf.get("prompt").is_some() { wf } else { json!({"prompt": wf}) };
+    }
+
+    // Apply parameter dictionary if provided (maps keys to any node inputs with matching names)
+    if let Some(params) = payload.get("params").cloned() {
+        if let Some(graph) = root.get_mut("prompt") {
+            apply_params_map(graph, &params);
+        }
     }
 
     // Apply dynamic overrides if provided

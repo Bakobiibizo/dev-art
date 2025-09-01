@@ -68,3 +68,49 @@ pub fn ensure_filename_prefix(graph: &mut Value, default_prefix: &str) {
     }
 }
 
+// Known parameter keys we support mapping into node inputs dynamically.
+const KNOWN_PARAM_KEYS: &[&str] = &[
+    "seed",
+    "steps",
+    "cfg",
+    "sampler_name",
+    "scheduler",
+    "denoise",
+    "width",
+    "height",
+    "batch_size",
+    "ckpt_name",
+    "text",
+];
+
+/// Apply a params object to the prompt graph by matching keys to node input names.
+///
+/// - For each key in KNOWN_PARAM_KEYS present in `params`, finds all nodes that
+///   have `inputs` containing that key and sets it to the provided value.
+/// - Special case for `text`: applies to all nodes with `inputs.text` (common for
+///   CLIPTextEncode). If the caller wants different values per text node, they can
+///   still use explicit `sets` paths.
+pub fn apply_params_map(graph: &mut Value, params: &Value) {
+    let obj = match params.as_object() { Some(o) => o, None => return };
+
+    // Extract only known keys with values
+    let mut kvs: Vec<(&str, &Value)> = Vec::new();
+    for &k in KNOWN_PARAM_KEYS {
+        if let Some(v) = obj.get(k) {
+            kvs.push((k, v));
+        }
+    }
+    if kvs.is_empty() { return; }
+
+    if let Some(nodes) = graph.as_object_mut() {
+        for (_id, node) in nodes.iter_mut() {
+            if let Some(inputs) = node.get_mut("inputs").and_then(|v| v.as_object_mut()) {
+                for (k, v) in kvs.iter() {
+                    if inputs.contains_key(*k) {
+                        inputs.insert((*k).to_string(), (*v).clone());
+                    }
+                }
+            }
+        }
+    }
+}
