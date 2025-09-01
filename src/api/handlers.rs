@@ -35,10 +35,22 @@ pub async fn queue_prompt(
         root = if wf.get("prompt").is_some() { wf } else { json!({"prompt": wf}) };
     }
 
-    // Apply parameter dictionary if provided (maps keys to any node inputs with matching names)
-    if let Some(params) = payload.get("params").cloned() {
+    // Merge params from `params` object and top-level known keys
+    let mut params_obj = serde_json::Map::new();
+    if let Some(params) = payload.get("params").and_then(|v| v.as_object()) {
+        for (k, v) in params.iter() { params_obj.insert(k.clone(), v.clone()); }
+    }
+    // Top-level convenience fields
+    let top_keys = [
+        "seed","steps","cfg","sampler_name","scheduler","denoise",
+        "width","height","batch_size","ckpt_name","text","text_positive","text_negative"
+    ];
+    for k in top_keys.iter() {
+        if let Some(v) = payload.get(*k) { params_obj.insert((*k).to_string(), v.clone()); }
+    }
+    if !params_obj.is_empty() {
         if let Some(graph) = root.get_mut("prompt") {
-            apply_params_map(graph, &params);
+            apply_params_map(graph, &Value::Object(params_obj));
         }
     }
 
@@ -62,6 +74,11 @@ pub async fn queue_prompt(
     // Ensure filename_prefix default if applicable
     let default_prefix = payload.get("filename_prefix").and_then(|v| v.as_str()).unwrap_or("Derivata");
     if let Some(graph) = root.get_mut("prompt") { ensure_filename_prefix(graph, default_prefix); }
+
+    // Verbose: log constructed body
+    if payload.get("verbose").and_then(|v| v.as_bool()).unwrap_or(false) {
+        tracing::info!(target: "queue_prompt", body = %serde_json::to_string(&root).unwrap_or_default(), "Constructed request body");
+    }
 
     // Use the constructed body for the request
     state.comfyui_client.queue_prompt(root)

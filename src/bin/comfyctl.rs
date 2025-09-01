@@ -61,6 +61,39 @@ enum PromptCmd {
         /// Negative prompt text; auto-routed via KSampler links when possible
         #[arg(long, value_name = "TEXT")]
         text_negative: Option<String>,
+        /// Seed
+        #[arg(long)]
+        seed: Option<i64>,
+        /// Steps
+        #[arg(long)]
+        steps: Option<i64>,
+        /// CFG scale
+        #[arg(long)]
+        cfg: Option<f64>,
+        /// Sampler name
+        #[arg(long)]
+        sampler_name: Option<String>,
+        /// Scheduler
+        #[arg(long)]
+        scheduler: Option<String>,
+        /// Denoise strength
+        #[arg(long)]
+        denoise: Option<f64>,
+        /// Width
+        #[arg(long)]
+        width: Option<i64>,
+        /// Height
+        #[arg(long)]
+        height: Option<i64>,
+        /// Batch size
+        #[arg(long, alias = "batchsize")]
+        batch_size: Option<i64>,
+        /// Checkpoint name
+        #[arg(long)]
+        ckpt_name: Option<String>,
+        /// Verbose: print constructed prompt body before sending
+        #[arg(short, long)]
+        verbose: bool,
     },
 }
 
@@ -82,14 +115,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Config::dotenv_load();
     let cli = Cli::parse();
 
-    let mut cfg = Config::new().expect("Failed to load config");
+    let mut conf = Config::new().expect("Failed to load config");
     if let Some(url) = cli.comfyui_url {
-        cfg.comfyui_url = url;
+        conf.comfyui_url = url;
     }
 
     match cli.command {
         Commands::Prompt { cmd } => match cmd {
-            PromptCmd::Queue { workflow, file, sets, filename_prefix, text_positive, text_negative } => {
+            PromptCmd::Queue {
+                workflow, file, sets, filename_prefix,
+                text_positive, text_negative,
+                seed, steps, cfg, sampler_name, scheduler, denoise,
+                width, height, batch_size, ckpt_name,
+                verbose,
+            } => {
                 let path = match (workflow, file) {
                     (Some(name), None) => format!("prompts/{}.json", name),
                     (None, Some(p)) => p,
@@ -104,11 +143,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 // Extract graph whether already wrapped or not
                 let mut graph = if let Some(p) = raw.get("prompt").cloned() { p } else { raw.clone() };
 
-                // Apply param-based text mapping if provided
-                if text_positive.is_some() || text_negative.is_some() {
-                    let mut params = serde_json::Map::new();
-                    if let Some(t) = text_positive { params.insert("text_positive".into(), Value::String(t)); }
-                    if let Some(t) = text_negative { params.insert("text_negative".into(), Value::String(t)); }
+                // Build params map from flags
+                let mut params = serde_json::Map::new();
+                if let Some(t) = text_positive { params.insert("text_positive".into(), Value::String(t)); }
+                if let Some(t) = text_negative { params.insert("text_negative".into(), Value::String(t)); }
+                if let Some(v) = seed { params.insert("seed".into(), Value::from(v)); }
+                if let Some(v) = steps { params.insert("steps".into(), Value::from(v)); }
+                if let Some(v) = cfg { params.insert("cfg".into(), json!(v)); }
+                if let Some(v) = sampler_name { params.insert("sampler_name".into(), Value::String(v)); }
+                if let Some(v) = scheduler { params.insert("scheduler".into(), Value::String(v)); }
+                if let Some(v) = denoise { params.insert("denoise".into(), json!(v)); }
+                if let Some(v) = width { params.insert("width".into(), Value::from(v)); }
+                if let Some(v) = height { params.insert("height".into(), Value::from(v)); }
+                if let Some(v) = batch_size { params.insert("batch_size".into(), Value::from(v)); }
+                if let Some(v) = ckpt_name { params.insert("ckpt_name".into(), Value::String(v)); }
+                if !params.is_empty() {
                     apply_params_map(&mut graph, &Value::Object(params));
                 }
 
@@ -131,10 +180,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 // If not overridden, set filename_prefix defaults
                 ensure_filename_prefix(&mut graph, &filename_prefix);
 
-                // Rewrap if needed
-                let body = if raw.get("prompt").is_some() { json!({"prompt": graph}) } else { json!({"prompt": graph}) };
+                // Construct request body
+                let body = json!({"prompt": graph});
 
-                let client = ComfyUIClient::new(cfg.comfyui_url.clone());
+                if verbose {
+                    eprintln!("[verbose] Request body to ComfyUI:\n{}", serde_json::to_string_pretty(&body)?);
+                }
+
+                let client = ComfyUIClient::new(conf.comfyui_url.clone());
                 let res = client.queue_prompt(body).await;
                 match res {
                     Ok(v) => {
@@ -149,7 +202,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         },
         Commands::History { prompt_id, pretty } => {
-            let client = ComfyUIClient::new(cfg.comfyui_url.clone());
+            let client = ComfyUIClient::new(conf.comfyui_url.clone());
             let hist = client.get_history().await.map_err(|e| {
                 eprintln!("Error: {}", e);
                 e
@@ -174,13 +227,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         Commands::Image { cmd } => match cmd {
             ImageCmd::Get { filename, out } => {
-                let client = ComfyUIClient::new(cfg.comfyui_url.clone());
+                let client = ComfyUIClient::new(conf.comfyui_url.clone());
                 let bytes = client.get_image(&filename).await.map_err(|e| {
                     eprintln!("Error: {}", e);
                     e
                 })?;
                 // Default to <STATIC_DRIVE_PATH>/images/<filename>
-                let default_dir = PathBuf::from(cfg.static_drive_path).join("images");
+                let default_dir = PathBuf::from(conf.static_drive_path).join("images");
                 tokio::fs::create_dir_all(&default_dir).await?;
                 let path = out.unwrap_or_else(|| default_dir.join(&filename));
                 tokio::fs::write(&path, &bytes).await?;
