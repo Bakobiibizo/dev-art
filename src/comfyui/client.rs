@@ -96,6 +96,10 @@ impl ComfyUIClient {
 
     /// List models within a category from `/models/<category>`.
     pub async fn get_models_in_category(&self, category: &str) -> AppResult<Value> {
+        // Basic validation: allow alphanumeric, underscore, and hyphen only
+        if !category.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-') {
+            return Err(AppError::ComfyUI("Invalid model category".to_string()));
+        }
         let url = format!("{}/models/{}", self.base_url, category);
         let response = self.client.get(&url)
             .send()

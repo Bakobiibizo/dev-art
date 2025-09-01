@@ -3,6 +3,7 @@ use comfyui_api_proxy::{Config, ComfyUIClient};
 use serde_json::{json, Value};
 use std::path::PathBuf;
 use comfyui_api_proxy::utils::prompt_ops::{apply_set_path, ensure_filename_prefix, parse_set_pairs, apply_params_map};
+use comfyui_api_proxy::utils::prompt_build::{apply_overrides_from_payload, ensure_defaults_on_root, is_probably_graph};
 
 #[derive(Parser, Debug)]
 #[command(name = "comfyctl", about = "CLI for ComfyUI API Proxy", version)]
@@ -188,7 +189,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     return Err(format!("Workflow at '{}' does not look like a valid ComfyUI graph", path).into());
                 }
 
-                // Build params map from flags
+                // Construct payload from flags for shared override application
+                let mut payload_obj = serde_json::Map::new();
+                payload_obj.insert("prompt".into(), graph.clone());
                 let mut params = serde_json::Map::new();
                 if let Some(t) = text_positive { params.insert("text_positive".into(), Value::String(t)); }
                 if let Some(t) = text_negative { params.insert("text_negative".into(), Value::String(t)); }
@@ -202,38 +205,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 if let Some(v) = height { params.insert("height".into(), Value::from(v)); }
                 if let Some(v) = batch_size { params.insert("batch_size".into(), Value::from(v)); }
                 if let Some(v) = ckpt_name { params.insert("ckpt_name".into(), Value::String(v)); }
-                if !params.is_empty() {
-                    apply_params_map(&mut graph, &Value::Object(params));
-                }
-
-                // Apply dynamic overrides
-                if !sets.is_empty() {
-                    let pairs = parse_set_pairs(&sets).map_err(|e| {
-                        let boxed: Box<dyn std::error::Error> = e.into();
-                        boxed
-                    })?;
-                    for (path, new_val) in pairs {
-                        if !apply_set_path(&mut graph, &path, new_val.clone()) {
-                            // If graph was originally wrapped, user may have provided a full path starting with `prompt.`
-                            let ok2 = apply_set_path(&mut raw, &path, new_val.clone());
-                            if !ok2 {
-                                let msg = format!("Failed to apply --set to path: {}", path.join("."));
-                                if strict_set { return Err(msg.into()); }
-                                eprintln!("Warning: {}", msg);
-                            }
-                        }
-                    }
-                }
-
-                // If not overridden, set filename_prefix defaults
-                ensure_filename_prefix(&mut graph, &filename_prefix);
-
-                // Construct request body
-                let body = json!({"prompt": graph});
-
-                if verbose {
-                    eprintln!("[verbose] Request body to ComfyUI:\n{}", serde_json::to_string_pretty(&body)?);
-                }
+                if !params.is_empty() { payload_obj.insert("params".into(), Value::Object(params)); }
+                if !sets.is_empty() { payload_obj.insert("sets".into(), Value::Array(sets.iter().map(|s| Value::String(s.clone())).collect())); }
+                let mut body = json!({"prompt": graph});
+                apply_overrides_from_payload(&mut body, &Value::Object(payload_obj))?;
+                ensure_defaults_on_root(&mut body, Some(&filename_prefix));
+                if verbose { eprintln!("[verbose] Request body to ComfyUI:\n{}", serde_json::to_string_pretty(&body)?); }
 
                 let client = ComfyUIClient::new(conf.comfyui_url.clone());
                 let res = client.queue_prompt(body).await;
@@ -411,18 +388,7 @@ fn collect_any_filenames(v: &Value, out: &mut Vec<String>) {
     }
 }
 
-fn is_probably_graph(graph: &Value) -> bool {
-    if let Some(obj) = graph.as_object() {
-        for (_k, v) in obj.iter() {
-            if let Some(node) = v.as_object() {
-                if node.get("class_type").and_then(|ct| ct.as_str()).is_some() {
-                    return true;
-                }
-            }
-        }
-    }
-    false
-}
+// (moved to utils::prompt_build)
 
 fn collect_prompt_ids(v: &Value, out: &mut Vec<String>) {
     match v {

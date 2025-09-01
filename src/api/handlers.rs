@@ -5,7 +5,7 @@ use std::sync::Arc;
 use tokio::fs;
 
 use crate::api::routes::AppState;
-use crate::utils::prompt_ops::{parse_set_pairs, apply_set_path, ensure_filename_prefix, apply_params_map};
+use crate::utils::prompt_build::{resolve_prompt_root_from_payload, apply_overrides_from_payload, ensure_defaults_on_root, maybe_log_verbose};
 
 pub async fn root() -> &'static str {
     "ComfyUI API Proxy"
@@ -16,12 +16,9 @@ pub async fn queue_prompt(
     Json(payload): Json<Value>,
 ) -> Result<Json<Value>, String> {
     // Resolve base {"prompt": {...}}
-    let mut root = resolve_prompt_root(&payload, &state.prompts_dir).await?;
-    // Merge params and sets
-    apply_overrides(&mut root, &payload)?;
-    // Ensure defaults
-    ensure_defaults(&mut root, payload.get("filename_prefix").and_then(|v| v.as_str()));
-    // Optionally log
+    let mut root = resolve_prompt_root_from_payload(&payload, &state.prompts_dir).await?;
+    apply_overrides_from_payload(&mut root, &payload)?;
+    ensure_defaults_on_root(&mut root, payload.get("filename_prefix").and_then(|v| v.as_str()));
     maybe_log_verbose(&root, payload.get("verbose").and_then(|v| v.as_bool()).unwrap_or(false));
 
     // Use the constructed body for the request
@@ -34,72 +31,6 @@ pub async fn queue_prompt(
         })
 }
 
-async fn resolve_prompt_root(payload: &Value, prompts_dir: &str) -> Result<Value, String> {
-    if let Some(prompt) = payload.get("prompt").cloned() {
-        return Ok(json!({"prompt": prompt}));
-    }
-    let workflow_name = payload.get("workflow")
-        .and_then(|v| v.as_str())
-        .ok_or("Either 'prompt' or 'workflow' must be provided")?;
-    let workflow_path = format!("{}/{}.json", prompts_dir.trim_end_matches('/'), workflow_name);
-    let workflow_content = fs::read_to_string(&workflow_path)
-        .await
-        .map_err(|e| format!("Failed to read workflow file: {}", e))?;
-    let wf: Value = from_str(&workflow_content)
-        .map_err(|e| format!("Failed to parse workflow JSON: {}", e))?;
-    Ok(if wf.get("prompt").is_some() { wf } else { json!({"prompt": wf}) })
-}
-
-fn apply_overrides(root: &mut Value, payload: &Value) -> Result<(), String> {
-    // Merge params from `params` object and top-level known keys
-    let mut params_obj = serde_json::Map::new();
-    if let Some(params) = payload.get("params").and_then(|v| v.as_object()) {
-        for (k, v) in params.iter() { params_obj.insert(k.clone(), v.clone()); }
-    }
-    let top_keys = [
-        "seed","steps","cfg","sampler_name","scheduler","denoise",
-        "width","height","batch_size","ckpt_name","text","text_positive","text_negative"
-    ];
-    for k in top_keys.iter() {
-        if let Some(v) = payload.get(*k) { params_obj.insert((*k).to_string(), v.clone()); }
-    }
-    if !params_obj.is_empty() {
-        if let Some(graph) = root.get_mut("prompt") {
-            apply_params_map(graph, &Value::Object(params_obj));
-        }
-    }
-    if let Some(sets) = payload.get("sets").and_then(|v| v.as_array()) {
-        let items: Vec<String> = sets.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect();
-        if !items.is_empty() {
-            let pairs = parse_set_pairs(&items).map_err(|e| e.to_string())?;
-            for (path, new_val) in pairs {
-                let applied_to_graph = {
-                    let graph = root.get_mut("prompt").ok_or("Missing 'prompt' in body")?;
-                    apply_set_path(graph, &path, new_val.clone())
-                };
-                if !applied_to_graph {
-                    let _ = apply_set_path(root, &path, new_val);
-                }
-            }
-        }
-    }
-    Ok(())
-}
-
-fn ensure_defaults(root: &mut Value, filename_prefix: Option<&str>) {
-    if let Some(graph) = root.get_mut("prompt") {
-        let default_prefix = filename_prefix.unwrap_or("Derivata");
-        ensure_filename_prefix(graph, default_prefix);
-    }
-}
-
-fn maybe_log_verbose(root: &Value, verbose: bool) {
-    if verbose {
-        if let Ok(s) = serde_json::to_string(root) {
-            tracing::info!(target: "queue_prompt", body = %s, "Constructed request body");
-        }
-    }
-}
 
 pub async fn get_name(Query(params): Query<std::collections::HashMap<String, String>>) -> String {
     let default = String::from("sdxl");
