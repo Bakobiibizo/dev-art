@@ -19,6 +19,7 @@ pub struct AppState {
     pub comfyui_client: ComfyUIClient,
     pub workflow_manager: RwLock<WorkflowManager>,
     pub static_drive_poller: Arc<StaticDrivePoller>,
+    pub prompts_dir: String,
 }
 
 pub fn setup_routes(comfyui_client: ComfyUIClient) -> Router {
@@ -28,6 +29,7 @@ pub fn setup_routes(comfyui_client: ComfyUIClient) -> Router {
         prompt_constructor: RwLock::new(PromptConstructor::new()),
         workflow_manager: RwLock::new(WorkflowManager::new()),
         static_drive_poller: Arc::new(StaticDrivePoller::new(config.static_drive_path.clone())),
+        prompts_dir: config.prompts_dir.clone(),
     });
 
     Router::new()

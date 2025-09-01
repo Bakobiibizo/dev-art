@@ -38,6 +38,7 @@ async fn main() {
         comfyui_client,
         workflow_manager: RwLock::new(workflow::manager::WorkflowManager::new()),
         static_drive_poller: Arc::new(utils::static_drive_poller::StaticDrivePoller::new(config.static_drive_path.clone())),
+        prompts_dir: config.prompts_dir.clone(),
     });
 
     // Build our application with a route
@@ -56,10 +57,18 @@ async fn main() {
         .layer(CorsLayer::permissive())
         .with_state(state);
 
-    // Run our application
-    let ip = config.api_host;
-    let port = config.api_port;
-    let socket_address = SocketAddr::new(ip.parse().unwrap(), port.parse().unwrap());
+    // Run our application with safe parsing
+    let host_str = config.api_host.clone();
+    let port_str = config.api_port.clone();
+    let ip: std::net::IpAddr = host_str.parse().unwrap_or_else(|_| {
+        tracing::warn!("Invalid API_HOST '{}', falling back to 127.0.0.1", host_str);
+        std::net::IpAddr::from([127, 0, 0, 1])
+    });
+    let port: u16 = port_str.parse().unwrap_or_else(|_| {
+        tracing::warn!("Invalid API_PORT '{}', falling back to 3000", port_str);
+        3000
+    });
+    let socket_address = SocketAddr::new(ip, port);
     tracing::info!("listening on {}", socket_address);
     axum::Server::bind(&socket_address)
         .serve(app.into_make_service())

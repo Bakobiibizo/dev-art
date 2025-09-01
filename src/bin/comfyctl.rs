@@ -177,10 +177,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 // Extract graph whether already wrapped or not
                 let mut graph = if let Some(p) = raw.get("prompt").cloned() { p } else { raw.clone() };
 
-<<<<<<< HEAD
-                // Build params map from flags
-=======
-                // Validate the graph shape minimally
+// Validate the graph shape minimally
                 if !is_probably_graph(&graph) {
                     return Err(format!("Workflow at '{}' does not look like a valid ComfyUI graph", path).into());
                 }
@@ -188,7 +185,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 // Construct payload from flags for shared override application
                 let mut payload_obj = serde_json::Map::new();
                 payload_obj.insert("prompt".into(), graph.clone());
->>>>>>> eb4f604 (refactor(shared): extract prompt_build helpers; refactor(api/cli): use shared prompt merging; config: print PROMPTS_DIR/API_HOST/API_PORT; client: validate model category)
                 let mut params = serde_json::Map::new();
                 if let Some(t) = text_positive { params.insert("text_positive".into(), Value::String(t)); }
                 if let Some(t) = text_negative { params.insert("text_negative".into(), Value::String(t)); }
@@ -202,7 +198,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 if let Some(v) = height { params.insert("height".into(), Value::from(v)); }
                 if let Some(v) = batch_size { params.insert("batch_size".into(), Value::from(v)); }
                 if let Some(v) = ckpt_name { params.insert("ckpt_name".into(), Value::String(v)); }
-<<<<<<< HEAD
+                if !params.is_empty() { payload_obj.insert("params".into(), Value::Object(params)); }
+                if !sets.is_empty() { payload_obj.insert("sets".into(), Value::Array(sets.iter().map(|s| Value::String(s.clone())).collect())); }
+                let mut body = json!({"prompt": graph});
+                apply_overrides_from_payload(&mut body, &Value::Object(payload_obj))?;
+                ensure_defaults_on_root(&mut body, Some(&filename_prefix));
+                if verbose { eprintln!("[verbose] Request body to ComfyUI:
+{}", serde_json::to_string_pretty(&body)?); }
+                let mut params = serde_json::Map::new();
+                if let Some(t) = text_positive { params.insert("text_positive".into(), Value::String(t)); }
+                if let Some(t) = text_negative { params.insert("text_negative".into(), Value::String(t)); }
+                if let Some(v) = seed { params.insert("seed".into(), Value::from(v)); }
+                if let Some(v) = steps { params.insert("steps".into(), Value::from(v)); }
+                if let Some(v) = cfg { params.insert("cfg".into(), json!(v)); }
+                if let Some(v) = sampler_name { params.insert("sampler_name".into(), Value::String(v)); }
+                if let Some(v) = scheduler { params.insert("scheduler".into(), Value::String(v)); }
+                if let Some(v) = denoise { params.insert("denoise".into(), json!(v)); }
+                if let Some(v) = width { params.insert("width".into(), Value::from(v)); }
+                if let Some(v) = height { params.insert("height".into(), Value::from(v)); }
+                if let Some(v) = batch_size { params.insert("batch_size".into(), Value::from(v)); }
+                if let Some(v) = ckpt_name { params.insert("ckpt_name".into(), Value::String(v)); }
                 if !params.is_empty() {
                     apply_params_map(&mut graph, &Value::Object(params));
                 }
@@ -232,14 +247,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 if verbose {
                     eprintln!("[verbose] Request body to ComfyUI:\n{}", serde_json::to_string_pretty(&body)?);
                 }
-=======
                 if !params.is_empty() { payload_obj.insert("params".into(), Value::Object(params)); }
                 if !sets.is_empty() { payload_obj.insert("sets".into(), Value::Array(sets.iter().map(|s| Value::String(s.clone())).collect())); }
                 let mut body = json!({"prompt": graph});
                 apply_overrides_from_payload(&mut body, &Value::Object(payload_obj))?;
                 ensure_defaults_on_root(&mut body, Some(&filename_prefix));
                 if verbose { eprintln!("[verbose] Request body to ComfyUI:\n{}", serde_json::to_string_pretty(&body)?); }
->>>>>>> eb4f604 (refactor(shared): extract prompt_build helpers; refactor(api/cli): use shared prompt merging; config: print PROMPTS_DIR/API_HOST/API_PORT; client: validate model category)
 
                 let client = ComfyUIClient::new(conf.comfyui_url.clone());
                 let res = client.queue_prompt(body).await;
@@ -417,11 +430,8 @@ fn collect_any_filenames(v: &Value, out: &mut Vec<String>) {
     }
 }
 
-<<<<<<< HEAD
-=======
 // (moved to utils::prompt_build)
 
->>>>>>> eb4f604 (refactor(shared): extract prompt_build helpers; refactor(api/cli): use shared prompt merging; config: print PROMPTS_DIR/API_HOST/API_PORT; client: validate model category)
 fn collect_prompt_ids(v: &Value, out: &mut Vec<String>) {
     match v {
         Value::Object(map) => {
