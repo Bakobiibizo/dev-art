@@ -47,9 +47,13 @@ async fn main() {
         .route("/queue_prompt", post(api::handlers::queue_prompt))
         .route("/get_image", get(api::handlers::get_image))
         .route("/get_history", get(api::handlers::get_history))
+        .route("/history", get(api::handlers::history_friendly))
         .route("/add_workflow", post(api::handlers::add_workflow))
         .route("/get_node_info", get(api::handlers::get_node_info))
         .route("/construct_prompt", post(api::handlers::construct_prompt))
+        .route("/models", get(api::handlers::models_categories))
+        .route("/models/checkpoints", get(api::handlers::models_checkpoints))
+        .route("/models/:category", get(api::handlers::models_in_category))
         .layer(CorsLayer::permissive())
         .with_state(state);
 
@@ -64,9 +68,10 @@ async fn main() {
         tracing::warn!("Invalid API_PORT '{}', falling back to 3000", port_str);
         3000
     });
-    let addr = SocketAddr::new(ip, port);
-    tracing::info!("listening on {}", addr);
-    axum::Server::bind(&addr)
+    let socket_address = SocketAddr::new(ip, port);
+    tracing::info!("listening on {}", socket_address);
+    axum::Server::bind(&socket_address)
+
         .serve(app.into_make_service())
         .await
         .unwrap();

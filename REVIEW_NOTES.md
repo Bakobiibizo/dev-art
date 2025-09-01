@@ -1,31 +1,34 @@
-# Review Notes — CLI Branch (feature/cli-mcp)
+# Review Notes — API Branch (feature/api-mirror-cli)
 
-This meta-commit documents the changes implemented during the review cycle for the CLI work.
+This meta-commit documents changes made during the review cycle for API parity and refactor work.
 
-- CLI UX
-  - Default outputs are human-friendly; add `--json` to emit raw JSON.
-  - `--verbose` prints the constructed request body for queue operations.
-  - Images save under `<STATIC_DRIVE_PATH>/images` by default (creates dir).
+- API endpoints
+  - Added `GET /history` with friendly text output by default (lists prompt_ids or filenames); add `?json=true` for raw JSON.
+  - Added `GET /models`, `GET /models/checkpoints`, and `GET /models/:category` (friendly text by default; `?json=true` for raw JSON).
 
-- Queue command
-  - Supports dynamic params mapped into node inputs: `--seed --steps --cfg --sampler-name --scheduler --denoise --width --height --batch-size --ckpt-name`.
-  - Supports `--text-positive` and `--text-negative` with automatic routing via KSampler graph links (fallback to CLIPTextEncode order).
-  - Supports repeated `--set key=value` for explicit path overrides.
-  - Uses `Config.prompts_dir` for `--workflow` file lookup (no hardcoded paths).
-  - Added minimal shape validation for the workflow graph.
+- queue_prompt refactor
+  - Extracted prompt loading/merging into shared helpers in `utils::prompt_build`:
+    - `resolve_prompt_root_from_payload` — accepts `{prompt}` or `{workflow}` and uses `prompts_dir`.
+    - `apply_overrides_from_payload` — merges `params{}` and `sets[]` consistently.
+    - `ensure_defaults_on_root` — ensures `filename_prefix` for SaveImage nodes.
+  - Handler now delegates to these helpers for readability and testability.
 
-- Models + History + Image
-  - `models categories|list|checkpoints` with pretty listing by default and `--json` for raw output.
-  - `history` lists prompt_ids or output filenames; `--json` for raw history.
-  - `image get <filename>` writes to `<STATIC_DRIVE_PATH>/images/<filename>` unless `--out` provided.
+- Configuration and state
+  - `AppState` now carries `prompts_dir`, sourced from `Config`, removing hardcoded paths.
+  - `print_env_vars()` includes `PROMPTS_DIR`, `API_HOST`, and `API_PORT` for completeness.
 
-- Shared behavior
-  - Introduced shared prompt-merge helpers (`utils::prompt_build`) and adopted them in CLI to keep behavior consistent with the API.
+- Server robustness
+  - Host/port parsing in `main.rs` now uses safe parsing with fallbacks and warnings (no panics on invalid config).
 
-- Safety/quality
-  - Added `--strict-set` option (on main iteration; retained behavior remains friendly by default).
+- Client validation
+  - `ComfyUIClient::get_models_in_category` validates the `category` input (alphanumeric, `_`, `-`) before building the URL.
+
+- Utilities improvements
+  - `apply_set_path` avoids silently creating intermediate objects (fails when path is missing).
+  - `ensure_filename_prefix` identifies SaveImage nodes by `class_type` instead of hardcoded node IDs.
 
 - Docs
-  - Updated README and AGENTS with CLI usage, flags, and examples.
+  - README updated with CLI/API usage, flags, and endpoints.
 
-This branch focuses on the CLI tooling; API surface and server behavior are handled in the API branch.
+This branch focuses on server/API behavior and parity with the CLI while keeping logic DRY across both surfaces.
+

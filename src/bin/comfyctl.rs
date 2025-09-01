@@ -184,7 +184,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 // Extract graph whether already wrapped or not
                 let mut graph = if let Some(p) = raw.get("prompt").cloned() { p } else { raw.clone() };
 
-                // Validate the graph shape minimally
                 if !is_probably_graph(&graph) {
                     return Err(format!("Workflow at '{}' does not look like a valid ComfyUI graph", path).into());
                 }
@@ -205,6 +204,43 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 if let Some(v) = height { params.insert("height".into(), Value::from(v)); }
                 if let Some(v) = batch_size { params.insert("batch_size".into(), Value::from(v)); }
                 if let Some(v) = ckpt_name { params.insert("ckpt_name".into(), Value::String(v)); }
+                if !params.is_empty() { payload_obj.insert("params".into(), Value::Object(params)); }
+                if !sets.is_empty() { payload_obj.insert("sets".into(), Value::Array(sets.iter().map(|s| Value::String(s.clone())).collect())); }
+                let mut body = json!({"prompt": graph});
+                apply_overrides_from_payload(&mut body, &Value::Object(payload_obj))?;
+                ensure_defaults_on_root(&mut body, Some(&filename_prefix));
+                if verbose { eprintln!("[verbose] Request body to ComfyUI:
+{}", serde_json::to_string_pretty(&body)?); }
+
+                if !params.is_empty() {
+                    apply_params_map(&mut graph, &Value::Object(params));
+                }
+
+                // Apply dynamic overrides
+                if !sets.is_empty() {
+                    let pairs = parse_set_pairs(&sets).map_err(|e| {
+                        let boxed: Box<dyn std::error::Error> = e.into();
+                        boxed
+                    })?;
+                    for (path, new_val) in pairs {
+                        if !apply_set_path(&mut graph, &path, new_val.clone()) {
+                            // If graph was originally wrapped, user may have provided a full path starting with `prompt.`
+                            if !apply_set_path(&mut raw, &path, new_val.clone()) {
+                                eprintln!("Warning: could not apply --set to path: {}", path.join("."));
+                            }
+                        }
+                    }
+                }
+
+                // If not overridden, set filename_prefix defaults
+                ensure_filename_prefix(&mut graph, &filename_prefix);
+
+                // Construct request body
+                let body = json!({"prompt": graph});
+
+                if verbose {
+                    eprintln!("[verbose] Request body to ComfyUI:\n{}", serde_json::to_string_pretty(&body)?);
+                }
                 if !params.is_empty() { payload_obj.insert("params".into(), Value::Object(params)); }
                 if !sets.is_empty() { payload_obj.insert("sets".into(), Value::Array(sets.iter().map(|s| Value::String(s.clone())).collect())); }
                 let mut body = json!({"prompt": graph});
