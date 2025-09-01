@@ -27,9 +27,9 @@ enum Commands {
         /// Filter by prompt ID to list output filenames
         #[arg(long)]
         prompt_id: Option<String>,
-        /// Pretty-print full JSON history
+        /// Output raw JSON instead of human-friendly listing
         #[arg(long)]
-        pretty: bool,
+        json: bool,
     },
     /// Image operations
     Image {
@@ -99,6 +99,9 @@ enum PromptCmd {
         /// Verbose: print constructed prompt body before sending
         #[arg(short, long)]
         verbose: bool,
+        /// Output raw JSON response instead of a friendly line
+        #[arg(long)]
+        json: bool,
     },
 }
 
@@ -157,7 +160,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 text_positive, text_negative,
                 seed, steps, cfg, sampler_name, scheduler, denoise,
                 width, height, batch_size, ckpt_name,
-                verbose,
+                verbose, json,
             } => {
                 let path = match (workflow, file) {
                     (Some(name), None) => format!("prompts/{}.json", name),
@@ -221,7 +224,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let res = client.queue_prompt(body).await;
                 match res {
                     Ok(v) => {
-                        println!("{}", serde_json::to_string_pretty(&v)?);
+                        if json {
+                            println!("{}", serde_json::to_string(&v)?);
+                        } else if let Some(obj) = v.as_object() {
+                            if let Some(pid) = obj.get("prompt_id").and_then(|x| x.as_str()) {
+                                if let Some(num) = obj.get("number").and_then(|x| x.as_i64()) {
+                                    println!("queued {} – prompt_id: {}", num, pid);
+                                } else {
+                                    println!("prompt_id: {}", pid);
+                                }
+                            } else {
+                                println!("{}", serde_json::to_string_pretty(&v)?);
+                            }
+                        } else {
+                            println!("{}", serde_json::to_string_pretty(&v)?);
+                        }
                         Ok(())
                     }
                     Err(e) => {
@@ -231,12 +248,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
         },
-        Commands::History { prompt_id, pretty } => {
+        Commands::History { prompt_id, json } => {
             let client = ComfyUIClient::new(conf.comfyui_url.clone());
             let hist = client.get_history().await.map_err(|e| {
                 eprintln!("Error: {}", e);
                 e
             })?;
+
+            if json {
+                println!("{}", serde_json::to_string(&hist)?);
+                return Ok(());
+            }
 
             if let Some(id) = prompt_id {
                 let mut files: Vec<String> = Vec::new();
@@ -247,11 +269,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     for f in files { println!("{}", f); }
                 }
                 Ok(())
-            } else if pretty {
-                println!("{}", serde_json::to_string_pretty(&hist)?);
-                Ok(())
             } else {
-                println!("{}", serde_json::to_string(&hist)?);
+                let mut ids: Vec<String> = Vec::new();
+                collect_prompt_ids(&hist, &mut ids);
+                if ids.is_empty() {
+                    println!("{}", serde_json::to_string_pretty(&hist)?);
+                } else {
+                    for id in ids { println!("{}", id); }
+                }
                 Ok(())
             }
         }
@@ -366,6 +391,22 @@ fn collect_any_filenames(v: &Value, out: &mut Vec<String>) {
         }
         Value::Array(arr) => {
             for vv in arr { collect_any_filenames(vv, out); }
+        }
+        _ => {}
+    }
+}
+
+fn collect_prompt_ids(v: &Value, out: &mut Vec<String>) {
+    match v {
+        Value::Object(map) => {
+            // Keys that look like UUIDs or known prompt ids
+            for (k, vv) in map.iter() {
+                if k.len() >= 8 && vv.is_object() { out.push(k.clone()); }
+                if k == "history" { collect_prompt_ids(vv, out); }
+            }
+        }
+        Value::Array(arr) => {
+            for vv in arr { collect_prompt_ids(vv, out); }
         }
         _ => {}
     }
