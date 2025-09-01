@@ -2,7 +2,7 @@ use clap::{Parser, Subcommand};
 use comfyui_api_proxy::{Config, ComfyUIClient};
 use serde_json::{json, Value};
 use std::path::PathBuf;
-use comfyui_api_proxy::utils::prompt_ops::{apply_set_path, ensure_filename_prefix, parse_set_pairs};
+use comfyui_api_proxy::utils::prompt_ops::{apply_set_path, ensure_filename_prefix, parse_set_pairs, apply_params_map};
 
 #[derive(Parser, Debug)]
 #[command(name = "comfyctl", about = "CLI for ComfyUI API Proxy", version)]
@@ -55,6 +55,12 @@ enum PromptCmd {
         /// Default filename prefix to apply if present and not overridden
         #[arg(long, default_value = "Derivata")]
         filename_prefix: String,
+        /// Positive prompt text; auto-routed via KSampler links when possible
+        #[arg(long, value_name = "TEXT")]
+        text_positive: Option<String>,
+        /// Negative prompt text; auto-routed via KSampler links when possible
+        #[arg(long, value_name = "TEXT")]
+        text_negative: Option<String>,
     },
 }
 
@@ -83,7 +89,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     match cli.command {
         Commands::Prompt { cmd } => match cmd {
-            PromptCmd::Queue { workflow, file, sets, filename_prefix } => {
+            PromptCmd::Queue { workflow, file, sets, filename_prefix, text_positive, text_negative } => {
                 let path = match (workflow, file) {
                     (Some(name), None) => format!("prompts/{}.json", name),
                     (None, Some(p)) => p,
@@ -97,6 +103,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 // Extract graph whether already wrapped or not
                 let mut graph = if let Some(p) = raw.get("prompt").cloned() { p } else { raw.clone() };
+
+                // Apply param-based text mapping if provided
+                if text_positive.is_some() || text_negative.is_some() {
+                    let mut params = serde_json::Map::new();
+                    if let Some(t) = text_positive { params.insert("text_positive".into(), Value::String(t)); }
+                    if let Some(t) = text_negative { params.insert("text_negative".into(), Value::String(t)); }
+                    apply_params_map(&mut graph, &Value::Object(params));
+                }
 
                 // Apply dynamic overrides
                 if !sets.is_empty() {
