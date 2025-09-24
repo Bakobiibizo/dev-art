@@ -5,7 +5,7 @@ use comfyui_api_proxy::comfyui::client::ComfyUIClient;
 
 #[tokio::test]
 async fn test_queue_prompt() {
-    let client = ComfyUIClient::new("http://https://comfy-agentartificial.ngrok.dev".to_string());
+    let client = ComfyUIClient::new("http://art-comai.ngrok.dev".to_string());
     let test_prompt = json!({
         "3": {
             "inputs": {

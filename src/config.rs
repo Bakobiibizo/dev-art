@@ -13,7 +13,7 @@ impl Config {
     }
     pub fn new() -> Result<Self, env::VarError> {
         Ok(Config {
-            comfyui_url: env::var("COMFYUI_URL").unwrap_or_else(|_| "https://comfy-agentartificial.ngrok.dev".to_string()),
+            comfyui_url: env::var("COMFYUI_URL").unwrap_or_else(|_| "https://art-comai.ngrok.dev".to_string()),
             static_drive_path: env::var("STATIC_DRIVE_PATH").unwrap_or_else(|_| "./static".to_string()),
         })
     }
