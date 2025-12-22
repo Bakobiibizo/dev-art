@@ -23,8 +23,8 @@ async fn main() {
     tracing_subscriber::fmt::init();
 
     // Load configuration
-    let config = config::Config::new().expect("Failed to load configuration");
     config::Config::dotenv_load();
+    let config = config::Config::new().expect("Failed to load configuration");
     config::Config::print_env_vars();
     // Create ComfyUI client
     let comfyui_client = comfyui::client::ComfyUIClient::new(config.comfyui_url.clone());
@@ -65,8 +65,8 @@ async fn main() {
         std::net::IpAddr::from([127, 0, 0, 1])
     });
     let port: u16 = port_str.parse().unwrap_or_else(|_| {
-        tracing::warn!("Invalid API_PORT '{}', falling back to 3000", port_str);
-        3000
+        tracing::warn!("Invalid API_PORT '{}', falling back to 8189", port_str);
+        8189
     });
     let socket_address = SocketAddr::new(ip, port);
     tracing::info!("listening on {}", socket_address);

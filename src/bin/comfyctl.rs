@@ -204,16 +204,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 if let Some(v) = height { params.insert("height".into(), Value::from(v)); }
                 if let Some(v) = batch_size { params.insert("batch_size".into(), Value::from(v)); }
                 if let Some(v) = ckpt_name { params.insert("ckpt_name".into(), Value::String(v)); }
-                if !params.is_empty() { payload_obj.insert("params".into(), Value::Object(params)); }
+                if !params.is_empty() { payload_obj.insert("params".into(), Value::Object(params.clone())); }
                 if !sets.is_empty() { payload_obj.insert("sets".into(), Value::Array(sets.iter().map(|s| Value::String(s.clone())).collect())); }
                 let mut body = json!({"prompt": graph});
-                apply_overrides_from_payload(&mut body, &Value::Object(payload_obj))?;
+                apply_overrides_from_payload(&mut body, &Value::Object(payload_obj.clone()))?;
                 ensure_defaults_on_root(&mut body, Some(&filename_prefix));
                 if verbose { eprintln!("[verbose] Request body to ComfyUI:
 {}", serde_json::to_string_pretty(&body)?); }
 
                 if !params.is_empty() {
-                    apply_params_map(&mut graph, &Value::Object(params));
+                    apply_params_map(&mut graph, &Value::Object(params.clone()));
                 }
 
                 // Apply dynamic overrides
@@ -241,10 +241,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 if verbose {
                     eprintln!("[verbose] Request body to ComfyUI:\n{}", serde_json::to_string_pretty(&body)?);
                 }
-                if !params.is_empty() { payload_obj.insert("params".into(), Value::Object(params)); }
+                if !params.is_empty() { payload_obj.insert("params".into(), Value::Object(params.clone())); }
                 if !sets.is_empty() { payload_obj.insert("sets".into(), Value::Array(sets.iter().map(|s| Value::String(s.clone())).collect())); }
                 let mut body = json!({"prompt": graph});
-                apply_overrides_from_payload(&mut body, &Value::Object(payload_obj))?;
+                apply_overrides_from_payload(&mut body, &Value::Object(payload_obj.clone()))?;
                 ensure_defaults_on_root(&mut body, Some(&filename_prefix));
                 if verbose { eprintln!("[verbose] Request body to ComfyUI:\n{}", serde_json::to_string_pretty(&body)?); }
 
