@@ -6,6 +6,7 @@
 use reqwest::Client;
 use serde_json::Value;
 use crate::error::{AppResult, AppError};
+use std::time::Duration;
 
 #[derive(Clone)]
 pub struct ComfyUIClient {
@@ -16,7 +17,12 @@ pub struct ComfyUIClient {
 impl ComfyUIClient {
     pub fn new(base_url: String) -> Self {
         let base = base_url.trim_end_matches('/').to_string();
-        ComfyUIClient { client: Client::new(), base_url: base }
+        let client = Client::builder()
+            // Allow long-running generations (e.g., 20 minutes)
+            .timeout(Duration::from_secs(60 * 25))
+            .build()
+            .expect("failed to build reqwest client");
+        ComfyUIClient { client, base_url: base }
     }
 
     /// Queue a prompt with ComfyUI.

@@ -19,6 +19,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN curl https://sh.rustup.rs -sSf | sh -s -- -y --profile minimal --default-toolchain stable \
  && chmod -R a+w ${CARGO_HOME} ${RUSTUP_HOME}
 
+# Prebuild proxy binary to avoid runtime cargo permission issues
+COPY Cargo.toml Cargo.lock /tmp/art/
+COPY src /tmp/art/src
+RUN cd /tmp/art \
+ && cargo build --release --bin comfyui-api-proxy \
+ && install -m 0755 /tmp/art/target/release/comfyui-api-proxy /usr/local/bin/comfyui-api-proxy \
+ && rm -rf /tmp/art/target
+
 RUN pip install --no-cache-dir uv
 
 RUN pip uninstall -y pynvml || true \
